@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="gu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DropLink - કાયમી ફાઇલ ટ્રાન્સફર & ફોટો સુધારો</title>
+    <!-- PeerJS for Direct P2P File Transfer -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <!-- QR Code Generator Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --success: #16a34a;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #0f172a;
+        }
+        * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background: var(--bg); color: var(--text); margin: 0; padding: 20px; display: flex; justify-content: center; }
+        .container { width: 100%; max-width: 600px; background: var(--card); border-radius: 16px; padding: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.06); }
+        h1 { text-align: center; margin-top: 0; font-size: 22px; color: var(--primary); }
+        .badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; background: #e0f2fe; color: #0284c7; }
+        .card-box { border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-top: 18px; background: #fafafa; }
+        .qr-section { text-align: center; }
+        #qrcode { display: inline-block; margin: 12px auto; padding: 10px; background: white; border-radius: 8px; border: 1px solid #cbd5e1; }
+        .status-pill { padding: 6px 12px; border-radius: 50px; font-size: 13px; font-weight: 600; display: inline-block; margin: 8px 0; }
+        .status-waiting { background: #fef3c7; color: #b45309; }
+        .status-connected { background: #dcfce7; color: #15803d; }
+        button { width: 100%; padding: 12px; border-radius: 8px; border: none; background: var(--primary); color: white; font-size: 15px; font-weight: 600; cursor: pointer; transition: 0.2s; margin-top: 8px; }
+        button:hover { background: var(--primary-hover); }
+        button.green { background: var(--success); }
+        button.green:hover { background: #15803d; }
+        input[type="file"] { width: 100%; margin: 8px 0; }
+        .slider-group { margin: 10px 0; }
+        .slider-group label { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; color: #475569; }
+        .slider-group input { width: 100%; margin-top: 4px; }
+        canvas { max-width: 100%; border-radius: 8px; margin-top: 10px; border: 1px solid #cbd5e1; display: none; }
+        #receivedFiles { list-style: none; padding: 0; margin-top: 10px; }
+        #receivedFiles li { background: white; border: 1px solid #e2e8f0; padding: 10px; border-radius: 6px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+        #receivedFiles a { color: var(--primary); text-decoration: none; font-weight: 600; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>⚡ DropLink - કાયમી ફાઇલ ટ્રાન્સફર</h1>
+    <div style="text-align: center;"><span class="badge">સુરક્ષિત P2P કનેક્શન (ડાયરેક્ટ શેરિંગ)</span></div>
+
+    <!-- QR & Connection Section -->
+    <div class="card-box qr-section">
+        <div id="connectionStatus" class="status-pill status-waiting">કનેક્શન કોડ જનરેટ થઈ રહ્યો છે...</div>
+        <div id="qrcode"></div>
+        <p style="font-size: 13px; color: #64748b; margin: 5px 0;">આ QR કોડ બીજા મોબાઈલ કે પીસીના કેમેરાથી સ્કેન કરો</p>
+    </div>
+
+    <!-- 1. Send Normal File -->
+    <div class="card-box">
+        <h3 style="margin: 0 0 8px 0; font-size: 16px;">📁 ૧. કોઈપણ ફાઇલ મોકલો</h3>
+        <input type="file" id="fileInput">
+        <button id="sendBtn" onclick="sendFile()">પીસી / મોબાઈલ પર સેન્ડ કરો</button>
+    </div>
+
+    <!-- 2. Image Enhancer (Fix Blurry Photos) -->
+    <div class="card-box">
+        <h3 style="margin: 0 0 8px 0; font-size: 16px;">✨ ૨. ઝાંખો ફોટો સુધારીને મોકલો</h3>
+        <input type="file" id="photoInput" accept="image/*" onchange="loadPhoto(event)">
+
+        <div class="slider-group">
+            <label><span>શાર્પનેસ (તીક્ષ્ણતા):</span> <span id="valSharp">3</span></label>
+            <input type="range" id="sharpness" min="1" max="5" step="0.5" value="3" oninput="applyFilters()">
+        </div>
+        <div class="slider-group">
+            <label><span>કોન્ટ્રાસ્ટ (Contrast):</span> <span id="valContrast">1.5</span></label>
+            <input type="range" id="contrast" min="1" max="3" step="0.2" value="1.5" oninput="applyFilters()">
+        </div>
+        <div class="slider-group">
+            <label><span>બ્રાઇટનેસ (Brightness):</span> <span id="valBright">1.2</span></label>
+            <input type="range" id="brightness" min="0.8" max="2" step="0.1" value="1.2" oninput="applyFilters()">
+        </div>
+
+        <canvas id="previewCanvas"></canvas>
+        <button class="green" onclick="sendEnhancedPhoto()">સુધારેલો ફોટો સેન્ડ કરો</button>
+    </div>
+
+    <!-- 3. Received Files -->
+    <div class="card-box">
+        <h3 style="margin: 0 0 8px 0; font-size: 16px;">📥 પ્રાપ્ત થયેલી ફાઇલો</h3>
+        <ul id="receivedFiles"></ul>
+    </div>
+</div>
+
+<script>
+    let peer = null;
+    let conn = null;
+    let originalImage = null;
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetPeerId = urlParams.get('connect');
+
+    function initPeer() {
+        peer = new Peer();
+
+        peer.on('open', (id) => {
+            if (targetPeerId) {
+                // If scanned from mobile
+                document.getElementById('connectionStatus').innerText = "પીસી સાથે જોડાઈ રહ્યું છે...";
+                conn = peer.connect(targetPeerId);
+                setupConnection();
+            } else {
+                // If host (PC)
+                const currentUrl = window.location.origin + window.location.pathname + '?connect=' + id;
+                document.getElementById('qrcode').innerHTML = "";
+                new QRCode(document.getElementById("qrcode"), {
+                    text: currentUrl,
+                    width: 170,
+                    height: 170
+                });
+                document.getElementById('connectionStatus').innerText = "QR સ્કેન થવાની રાહ જોવાઈ રહી છે...";
+            }
+        });
+
+        peer.on('connection', (c) => {
+            conn = c;
+            setupConnection();
+        });
+    }
+
+    function setupConnection() {
+        conn.on('open', () => {
+            const statusEl = document.getElementById('connectionStatus');
+            statusEl.className = "status-pill status-connected";
+            statusEl.innerText = "સફળતાપૂર્વક જોડાઈ ગયું! (Connected)";
+        });
+
+        conn.on('data', (data) => {
+            if (data.file) {
+                const blob = new Blob([data.file], { type: data.fileType });
+                const url = URL.createObjectURL(blob);
+                const list = document.getElementById('receivedFiles');
+                const li = document.createElement('li');
+                li.innerHTML = `<span>📄 <b>${data.fileName}</b></span> <a href="${url}" download="${data.fileName}">ડાઉનલોડ ⬇</a>`;
+                list.prepend(li);
+            }
+        });
+    }
+
+    function sendFile() {
+        const fileInput = document.getElementById('fileInput');
+        if (!fileInput.files.length) return alert('કૃપા કરીને ફાઇલ પસંદ કરો');
+        if (!conn || !conn.open) return alert('પહેલાં બંને ડિવાઇસ કનેક્ટ કરો (QR સ્કેન કરો)');
+
+        const file = fileInput.files[0];
+        conn.send({ file: file, fileName: file.name, fileType: file.type });
+        alert(`'${file.name}' મોકલી દેવામાં આવી છે!`);
+        fileInput.value = '';
+    }
+
+    function loadPhoto(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            originalImage = new Image();
+            originalImage.onload = function() {
+                document.getElementById('previewCanvas').style.display = 'block';
+                applyFilters();
+            }
+            originalImage.src = event.target.result;
+        }
+        reader.readAsDataURL(file);
+    }
+
+    function applyFilters() {
+        if (!originalImage) return;
+        const canvas = document.getElementById('previewCanvas');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = originalImage.width;
+        canvas.height = originalImage.height;
+
+        const sharp = document.getElementById('sharpness').value;
+        const cont = document.getElementById('contrast').value;
+        const bright = document.getElementById('brightness').value;
+
+        document.getElementById('valSharp').innerText = sharp;
+        document.getElementById('valContrast').innerText = cont;
+        document.getElementById('valBright').innerText = bright;
+
+        // Apply visual CSS filters onto the canvas context
+        ctx.filter = `contrast(${cont}) brightness(${bright})`;
+        ctx.drawImage(originalImage, 0, 0);
+
+        // Simple convolution matrix for sharpness/unblur
+        if (parseFloat(sharp) > 1) {
+            applySharpness(ctx, canvas.width, canvas.height, parseFloat(sharp));
+        }
+    }
+
+    function applySharpness(ctx, w, h, strength) {
+        const imgData = ctx.getImageData(0, 0, w, h);
+        const data = imgData.data;
+        const copy = new Uint8ClampedArray(data);
+        const factor = (strength - 1) * 0.5;
+
+        for (let y = 1; y < h - 1; y++) {
+            for (let x = 1; x < w - 1; x++) {
+                const idx = (y * w + x) * 4;
+                for (let c = 0; c < 3; c++) {
+                    const up = ((y - 1) * w + x) * 4 + c;
+                    const down = ((y + 1) * w + x) * 4 + c;
+                    const left = (y * w + (x - 1)) * 4 + c;
+                    const right = (y * w + (x + 1)) * 4 + c;
+                    const center = idx + c;
+
+                    const laplacian = (copy[center] * 5) - (copy[up] + copy[down] + copy[left] + copy[right]);
+                    data[center] = Math.min(255, Math.max(0, copy[center] + laplacian * factor));
+                }
+            }
+        }
+        ctx.putImageData(imgData, 0, 0);
+    }
+
+    function sendEnhancedPhoto() {
+        if (!conn || !conn.open) return alert('પહેલાં બંને ડિવાઇસ કનેક્ટ કરો');
+        const canvas = document.getElementById('previewCanvas');
+        if (canvas.style.display === 'none') return alert('ફોટો સિલેક્ટ કરો');
+
+        canvas.toBlob((blob) => {
+            conn.send({ file: blob, fileName: 'enhanced_photo_' + Date.now() + '.jpg', fileType: 'image/jpeg' });
+            alert('સુધારેલો ફોટો સેન્ડ થઈ ગયો છે!');
+        }, 'image/jpeg', 0.95);
+    }
+
+    window.onload = initPeer;
+</script>
+
+</body>
+</html>
